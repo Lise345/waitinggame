@@ -245,14 +245,48 @@ elif game["phase"] == "result":
         persist()
         st.rerun()
 
+# ── auto-detect host URL ──────────────────────────────────────────────────────
+def _detect_url():
+    """Try to get the real public URL from Streamlit's runtime headers."""
+    try:
+        from streamlit.web.server.websocket_headers import _get_websocket_headers
+        headers = _get_websocket_headers()
+        host = headers.get("Host", "")
+        if host and "localhost" not in host and "127.0.0.1" not in host:
+            proto = "https" if "streamlit.app" in host else "http"
+            return f"{proto}://{host}"
+    except Exception:
+        pass
+    try:
+        # Streamlit >= 1.30 exposes this cleanly
+        ctx = st.runtime.scriptrunner.get_script_run_ctx()
+        if ctx and hasattr(ctx, "request") and ctx.request:
+            host = ctx.request.headers.get("host", "")
+            if host and "localhost" not in host:
+                proto = "https" if "streamlit.app" in host else "http"
+                return f"{proto}://{host}"
+    except Exception:
+        pass
+    return ""
+
+if "detected_url" not in st.session_state:
+    st.session_state.detected_url = _detect_url()
+
 # ── sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.title("⚙️ Setup")
+
+default_url = st.session_state.detected_url or "http://localhost:8501"
 app_url = st.sidebar.text_input(
     "This app's public URL (for QR codes)",
-    value="http://localhost:8501",
-    help="Paste your Streamlit Cloud URL here, e.g. https://myapp.streamlit.app")
-st.sidebar.caption("QR codes link to `<url>?team=left` and `?team=right` — "
-                   "both served by this same file.")
+    value=default_url,
+    help="Auto-detected where possible. On Streamlit Cloud this fills in automatically.")
+
+if st.session_state.detected_url:
+    st.sidebar.success(f"✅ URL auto-detected")
+else:
+    st.sidebar.warning("⚠️ Could not auto-detect URL. Paste your public URL above so QR codes work on phones.")
+
+st.sidebar.caption("QR codes link to `<url>?team=left` and `?team=right`")
 st.sidebar.markdown("---")
 if st.sidebar.button("🗑️ Reset game"):
     st.session_state.game  = _new_game()
@@ -290,7 +324,17 @@ html,body,[class*="css"]{font-family:'Nunito',sans-serif}
 </style>""", unsafe_allow_html=True)
 
 # ── header ────────────────────────────────────────────────────────────────────
-wa = "→" if game["wind"]>0 else ("←" if game["wind"]<0 else "—")
+w = game["wind"]
+# Wind bar: centre=0, range -5..+5. Arrow points in wind direction.
+# Bar fills from centre outward; colour = strength
+w_pct      = abs(w) / 5 * 50        # 0-50% of half-bar
+w_left     = (50 - w_pct) if w < 0 else 50   # left edge of filled segment
+w_width    = w_pct
+w_col      = "#4fc3f7" if abs(w) < 2 else "#ffcc44" if abs(w) < 4 else "#ff5722"
+arrow      = "➡️" if w > 0 else ("⬅️" if w < 0 else "⬆️")
+strength   = "Calm" if abs(w)<1 else "Light" if abs(w)<2.5 else "Moderate" if abs(w)<4 else "Strong"
+w_label    = f"{arrow} {strength} wind ({w:+.1f})"
+
 st.markdown(f"""
 <div class="title">🍌 Monkey Banana Battle 🐵</div>
 <div class="sb">
@@ -298,8 +342,29 @@ st.markdown(f"""
   <div class="vs">VS</div>
   <div><div class="sv rc">{game['score_right']}</div><div class="sn rc">Team Right 🐵</div></div>
 </div>
-<div style="text-align:center;font-size:.78rem;color:#bbb;margin-bottom:5px">
-  💨 Wind: {game['wind']:+.1f} {wa}
+<div style="background:#1a1a2e;border-radius:10px;padding:8px 16px;margin:6px 0 6px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+    <span style="font-family:'Bangers',cursive;font-size:1.1rem;color:#aaa;letter-spacing:1px">💨 WIND</span>
+    <span style="font-family:'Bangers',cursive;font-size:1.2rem;color:{w_col}">{w_label}</span>
+    <span style="font-family:'Bangers',cursive;font-size:1.1rem;color:#aaa;letter-spacing:1px">affects banana!</span>
+  </div>
+  <div style="position:relative;background:#333;border-radius:6px;height:14px">
+    <!-- centre tick -->
+    <div style="position:absolute;left:50%;top:0;width:2px;height:100%;background:#555"></div>
+    <!-- filled segment -->
+    <div style="position:absolute;left:{50 if w>=0 else 50-w_pct:.1f}%;
+                width:{w_pct:.1f}%;height:100%;background:{w_col};border-radius:6px;
+                opacity:.85"></div>
+    <!-- arrow head at tip -->
+    <div style="position:absolute;
+                {'left' if w>0 else 'right'}:{100-50-w_pct if w>0 else 100-50-w_pct:.1f}%;
+                top:-3px;font-size:1.1rem;line-height:1;transform:translateX({'- ' if w>0 else ''}50%)">
+      {'▶' if w>0 else ('◀' if w<0 else '')}</div>
+  </div>
+  <div style="display:flex;justify-content:space-between;
+              font-size:.65rem;color:#555;margin-top:2px;padding:0 2px">
+    <span>← Left</span><span>No wind</span><span>Right →</span>
+  </div>
 </div>""", unsafe_allow_html=True)
 
 # ── countdown / result banner ─────────────────────────────────────────────────
