@@ -58,7 +58,9 @@ def _new_game():
             "turn_start": time.time(),
             "result_start": None,
             "last_throw": None,
-            "wind": round(random.uniform(-5, 5), 1)}
+            "wind": round(random.uniform(-5, 5), 1),
+            "last_avg_left":  {"angle": 45, "power": 62},
+            "last_avg_right": {"angle": 45, "power": 62}}
 
 def _new_votes():
     return {"left": [], "right": []}
@@ -272,8 +274,22 @@ if game["phase"] == "voting":
     if time_left == 0:
         active = game["turn"]
         tv     = votes[active]
-        ang    = round(sum(v["angle"] for v in tv)/len(tv)) if tv else 45
-        pwr    = round(sum(v["power"] for v in tv)/len(tv)) if tv else 62
+        if tv:
+            ang = round(sum(v["angle"] for v in tv) / len(tv))
+            pwr = round(sum(v["power"] for v in tv) / len(tv))
+        
+            game[f"last_avg_{active}"] = {
+                "angle": ang,
+                "power": pwr
+            }
+        else:
+            prev = game.get(
+                f"last_avg_{active}",
+                {"angle": 45, "power": 62}
+            )
+        
+            ang = prev["angle"]
+            pwr = prev["power"]
         traj   = trajectory(ang, pwr, active, game["wind"])
         did_hit = hits(traj, active)
         if did_hit:
@@ -487,6 +503,32 @@ with cc:
     # How long the result has been shown (so JS can pick up where it left off)
     res_age   = (now - (game.get("result_start") or now)) if phase=="result" else 0
 
+    preview_traj = []
+    
+    if phase == "voting":
+        active_votes = votes[game["turn"]]
+    
+        if active_votes:
+            pa = round(sum(v["angle"] for v in active_votes) / len(active_votes))
+            pp = round(sum(v["power"] for v in active_votes) / len(active_votes))
+        else:
+            prev = game.get(
+                f"last_avg_{game['turn']}",
+                {"angle": 45, "power": 62}
+            )
+    
+            pa = prev["angle"]
+            pp = prev["power"]
+    
+        preview_traj = trajectory(
+            pa,
+            pp,
+            game["turn"],
+            game["wind"]
+        )
+    
+    preview_js = json.dumps(preview_traj)
+
     html = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>*{{margin:0;padding:0;box-sizing:border-box}}
 body{{background:transparent;overflow:hidden}}
@@ -506,6 +548,7 @@ const DID_HIT  = {did_hit};
 const HIT_SIDE = {hit_side};
 const RES_AGE  = {res_age:.2f};   // seconds already elapsed in result phase
 const ANIM_DUR = 2.5;             // seconds for banana to fly across
+const PREVIEW = {preview_js};
 
 // ── draw helpers ─────────────────────────────────────────────────────────────
 function sky(){{
@@ -577,8 +620,39 @@ function scene(fL,fR){{
 // In "result" phase: animate banana fly, then flash on hit.
 // In "voting" phase: just draw static scene.
 
-if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){{
+if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){
+
   scene(false,false);
+
+  // live aiming preview
+  if(PREVIEW && PREVIEW.length > 1){
+
+    cx.strokeStyle = 'rgba(245,208,32,.7)';
+    cx.lineWidth = 3;
+    cx.setLineDash([10,6]);
+
+    cx.beginPath();
+    cx.moveTo(PREVIEW[0][0], PREVIEW[0][1]);
+
+    for(let i=1;i<PREVIEW.length;i+=3){
+      cx.lineTo(PREVIEW[i][0], PREVIEW[i][1]);
+    }
+
+    cx.stroke();
+    cx.setLineDash([]);
+
+    // landing marker
+    const end = PREVIEW[PREVIEW.length - 1];
+
+    cx.font = '20px serif';
+    cx.textAlign = 'center';
+    cx.fillText('🍌', end[0], end[1]);
+
+    // target indicator
+    cx.fillStyle = 'rgba(255,255,255,.85)';
+    cx.font = '15px Bangers';
+    cx.fillText('Predicted throw', end[0], end[1] - 18);
+  }
 }} else {{
   const total = TRAJ.length;
   const FPS   = 60;
