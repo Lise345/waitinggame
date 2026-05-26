@@ -1,5 +1,5 @@
 """
-Monkey Banana Battle — single Streamlit file.
+Waiting game — single Streamlit file.
 ?team=left / ?team=right  → voter page
 (no param)                → main game screen
 """
@@ -7,7 +7,7 @@ import streamlit as st
 import math, json, time, os, io, base64, random
 from contextlib import contextmanager
 
-st.set_page_config(page_title="🍌 Monkey Banana Battle",
+st.set_page_config(page_title="🧪 PhD Public defense waiting game",
                    layout="wide", initial_sidebar_state="collapsed")
 
 # ── constants ─────────────────────────────────────────────────────────────────
@@ -256,7 +256,7 @@ if team_param in ("left", "right"):
             st.session_state[vk] = True; st.rerun()
 
     st.markdown(f"<div style='text-align:center;color:#333;font-size:.68rem;margin-top:20px'>"
-                f"Monkey Banana Battle · Team {team.upper()}</div>", unsafe_allow_html=True)
+                f"Waiting game · Team {team.upper()}</div>", unsafe_allow_html=True)
     time.sleep(1)
     st.rerun()
     st.stop()
@@ -404,7 +404,7 @@ strength   = "Calm" if abs(w)<1 else "Light" if abs(w)<2.5 else "Moderate" if ab
 w_label    = f"{arrow} {strength} wind ({w:+.1f})"
 
 st.markdown(f"""
-<div class="title">🍌 Monkey Banana Battle 🐵</div>
+<div class="title">🍌 Waiting game 🐵</div>
 <div class="sb">
   <div><div class="sn lc">🐵 Team Left</div><div class="sv lc">{game['score_left']}</div></div>
   <div class="vs">VS</div>
