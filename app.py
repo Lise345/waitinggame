@@ -620,12 +620,12 @@ function scene(fL,fR){{
 // In "result" phase: animate banana fly, then flash on hit.
 // In "voting" phase: just draw static scene.
 
-if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){
+if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){{
 
   scene(false,false);
 
   // live aiming preview
-  if(PREVIEW && PREVIEW.length > 1){
+  if(PREVIEW && PREVIEW.length > 1){{
 
     cx.strokeStyle = 'rgba(245,208,32,.7)';
     cx.lineWidth = 3;
@@ -634,9 +634,9 @@ if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){
     cx.beginPath();
     cx.moveTo(PREVIEW[0][0], PREVIEW[0][1]);
 
-    for(let i=1;i<PREVIEW.length;i+=3){
+    for(let i=1;i<PREVIEW.length;i+=3){{
       cx.lineTo(PREVIEW[i][0], PREVIEW[i][1]);
-    }
+    }}
 
     cx.stroke();
     cx.setLineDash([]);
@@ -652,7 +652,8 @@ if(PHASE !== 'result' || !TRAJ || TRAJ.length===0){
     cx.fillStyle = 'rgba(255,255,255,.85)';
     cx.font = '15px Bangers';
     cx.fillText('Predicted throw', end[0], end[1] - 18);
-  }
+  }}
+
 }} else {{
   const total = TRAJ.length;
   const FPS   = 60;
