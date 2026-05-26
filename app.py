@@ -275,16 +275,12 @@ if "detected_url" not in st.session_state:
 # ── sidebar ───────────────────────────────────────────────────────────────────
 st.sidebar.title("⚙️ Setup")
 
-default_url = st.session_state.detected_url or "http://localhost:8501"
+default_url = st.session_state.detected_url or "https://waitinggame-jbyqzggvgecpqpuxie5jtt.streamlit.app"
 app_url = st.sidebar.text_input(
     "This app's public URL (for QR codes)",
     value=default_url,
-    help="Auto-detected where possible. On Streamlit Cloud this fills in automatically.")
-
-if st.session_state.detected_url:
-    st.sidebar.success(f"✅ URL auto-detected")
-else:
-    st.sidebar.warning("⚠️ Could not auto-detect URL. Paste your public URL above so QR codes work on phones.")
+    help="Update this if you redeploy to a different URL.")
+st.sidebar.success(f"✅ QR codes point to this URL")
 
 st.sidebar.caption("QR codes link to `<url>?team=left` and `?team=right`")
 st.sidebar.markdown("---")
