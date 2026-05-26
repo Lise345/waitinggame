@@ -5,6 +5,7 @@ Monkey Banana Battle — single Streamlit file.
 """
 import streamlit as st
 import math, json, time, os, io, base64, random
+from contextlib import contextmanager
 
 st.set_page_config(page_title="🍌 Monkey Banana Battle",
                    layout="wide", initial_sidebar_state="collapsed")
@@ -24,6 +25,31 @@ HIT_R     = 42            # hit radius in px
 SCALE = 0.16
 GRAV  = 0.12
 
+# ── file locking ─────────────────────────────────────────────────────────────
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
+
+@contextmanager
+def locked_open(path, mode):
+    f = open(path, mode)
+    try:
+        if os.name == "nt":
+            msvcrt.locking(f.fileno(), msvcrt.LK_LOCK, 1)
+        else:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield f
+    finally:
+        try:
+            if os.name == "nt":
+                msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
+            else:
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except Exception:
+            pass
+        f.close()
+
 # ── state helpers ─────────────────────────────────────────────────────────────
 def _new_game():
     return {"score_left": 0, "score_right": 0,
@@ -37,27 +63,48 @@ def _new_game():
 def _new_votes():
     return {"left": [], "right": []}
 
-if "game" not in st.session_state:
-    g = _new_game()
+# ── shared state helpers ────────────────────────────────────────────────────
+def load_game():
     try:
         if os.path.exists(GAME_FILE):
-            with open(GAME_FILE) as f: g = json.load(f)
-    except Exception: pass
-    st.session_state.game = g
+            with open(GAME_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return _new_game()
 
-if "votes" not in st.session_state:
-    v = _new_votes()
+
+def load_votes():
     try:
         if os.path.exists(VOTES_FILE):
-            with open(VOTES_FILE) as f: v = json.load(f)
-    except Exception: pass
-    st.session_state.votes = v
+            with open(VOTES_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return _new_votes()
 
-def persist():
-    try:
-        with open(GAME_FILE,  "w") as f: json.dump(st.session_state.game,  f)
-        with open(VOTES_FILE, "w") as f: json.dump(st.session_state.votes, f)
-    except Exception: pass
+
+def save_game(game):
+    with locked_open(GAME_FILE, "w") as f:
+        json.dump(game, f)
+
+
+def save_votes(votes):
+    with locked_open(VOTES_FILE, "w") as f:
+        json.dump(votes, f)
+
+
+def persist(game, votes):
+    save_game(game)
+    save_votes(votes)
+
+
+# initialize shared files if missing
+if not os.path.exists(GAME_FILE):
+    save_game(_new_game())
+
+if not os.path.exists(VOTES_FILE):
+    save_votes(_new_votes())
 
 # ── physics ───────────────────────────────────────────────────────────────────
 def trajectory(angle_deg, power, direction, wind):
@@ -122,7 +169,8 @@ if team_param in ("left", "right"):
       <p style="color:#aaa;font-size:.85rem;margin:3px 0 0">🍌 Choose your throw!</p>
     </div>""", unsafe_allow_html=True)
 
-    game = st.session_state.game
+    game = load_game()
+    votes = load_votes()
     now  = time.time()
     secs_left = max(0.0, TURN_SECS - (now - game.get("turn_start", now)))
     is_my_turn = game["phase"] == "voting" and game["turn"] == team
@@ -194,20 +242,28 @@ if team_param in ("left", "right"):
 
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("🍌 SUBMIT VOTE", use_container_width=True, type="primary"):
-            st.session_state.votes[team].append(
-                {"angle": angle, "power": power, "ts": time.time()})
-            persist()
+            votes = load_votes()
+
+            votes[team].append({
+                "angle": angle,
+                "power": power,
+                "ts": time.time()
+            })
+            
+            save_votes(votes)
             st.session_state[vk] = True; st.rerun()
 
     st.markdown(f"<div style='text-align:center;color:#333;font-size:.68rem;margin-top:20px'>"
                 f"Monkey Banana Battle · Team {team.upper()}</div>", unsafe_allow_html=True)
+    time.sleep(1)
+    st.rerun()
     st.stop()
 
 # ═════════════════════════════════════════════════════════════════════════════
 # MAIN GAME SCREEN
 # ═════════════════════════════════════════════════════════════════════════════
-game  = st.session_state.game
-votes = st.session_state.votes
+game = load_game()
+votes = load_votes()
 now   = time.time()
 
 # ── phase transitions (fully automatic) ──────────────────────────────────────
@@ -229,8 +285,8 @@ if game["phase"] == "voting":
             "hit": did_hit, "trajectory": traj}
         game["phase"]        = "result"
         game["result_start"] = now
-        st.session_state.votes = _new_votes()
-        persist()
+        votes = _new_votes()
+        persist(game, votes)
         st.rerun()
 
 elif game["phase"] == "result":
@@ -242,7 +298,7 @@ elif game["phase"] == "result":
         game["result_start"] = None
         game["last_throw"] = None
         game["wind"]       = round(random.uniform(-5, 5), 1)
-        persist()
+        persist(game, votes)
         st.rerun()
 
 # ── auto-detect host URL ──────────────────────────────────────────────────────
@@ -285,9 +341,9 @@ st.sidebar.success(f"✅ QR codes point to this URL")
 st.sidebar.caption("QR codes link to `<url>?team=left` and `?team=right`")
 st.sidebar.markdown("---")
 if st.sidebar.button("🗑️ Reset game"):
-    st.session_state.game  = _new_game()
-    st.session_state.votes = _new_votes()
-    persist(); st.rerun()
+    game  = _new_game()
+    votes = _new_votes()
+    persist(game, votes); st.rerun()
 
 # ── QR codes ─────────────────────────────────────────────────────────────────
 left_url  = app_url.rstrip("/") + "?team=left"
@@ -623,8 +679,8 @@ with b3:
                 "hit": did_hit, "trajectory": traj}
             game["phase"]        = "result"
             game["result_start"] = now
-            st.session_state.votes = _new_votes()
-            persist(); st.rerun()
+            votes = _new_votes()
+            persist(game, votes); st.rerun()
     else:
         # Manual skip button during result phase too
         if st.button("➡️ Next turn now", use_container_width=True):
@@ -634,7 +690,7 @@ with b3:
             game["result_start"] = None
             game["last_throw"]   = None
             game["wind"]         = round(random.uniform(-5,5),1)
-            persist(); st.rerun()
+            persist(game, votes); st.rerun()
 
 # ── auto-rerun ────────────────────────────────────────────────────────────────
 # During voting: rerun every second to tick countdown.
