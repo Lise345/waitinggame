@@ -41,8 +41,8 @@ def _img_b64(filename):
     except Exception:
         return ""
 
-HUMAN_B64 = _img_b64("humanhand.png")
-ROBOT_B64 = _img_b64("robothand.png")
+HUMAN_B64 = _img_b64("./humanhand.png")
+ROBOT_B64 = _img_b64("./robothand.png")
 
 # ── file locking ──────────────────────────────────────────────────────────────
 if os.name == "nt":
