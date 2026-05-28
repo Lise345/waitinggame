@@ -14,7 +14,7 @@ st.set_page_config(page_title="Breaking Down the Building Blocks",
 # ── constants ─────────────────────────────────────────────────────────────────
 VOTES_FILE  = "votes.json"
 GAME_FILE   = "game_state.json"
-TURN_SECS   = 25
+TURN_SECS   = 15
 RESULT_SECS = 7
 
 # Canvas 900×400. Pivot points at base of each hand (centre of launcher disk)
@@ -106,7 +106,7 @@ def trajectory(angle_deg, power, direction, wind):
     The hand (length 110px on canvas) points at angle_deg from vertical.
     Left hand: 0°=straight up, positive angle tilts right (toward target).
     """
-    hand_len = 110  # pixels from pivot to fingertip on canvas
+    hand_len = 115  # pixels from pivot to fingertip — must match JS HAND_LEN=115
     if direction == "left":
         # angle from vertical, tilting right
         tip_x = LPX + math.sin(math.radians(angle_deg)) * hand_len
@@ -656,11 +656,11 @@ function scene(lTilt, rTilt, lHit, rHit, showMoleculeL, showMoleculeR){{
   disk(RPX, RPY, '{C_BLUE}');
   if(showMoleculeL){{
     const [tx,ty]=tipPos(LPX,LPY,lTilt,false);
-    molecule(tx,ty,7,'#E84040');
+    molecule(tx,ty,12,'#E84040');
   }}
   if(showMoleculeR){{
     const [tx,ty]=tipPos(RPX,RPY,rTilt,true);
-    molecule(tx,ty,7,'#E84040');
+    molecule(tx,ty,12,'#E84040');
   }}
 }}
 
@@ -688,7 +688,7 @@ function start(){{
       for(let i=1;i<PREVIEW.length;i+=3) cx.lineTo(PREVIEW[i][0],PREVIEW[i][1]);
       cx.stroke(); cx.setLineDash([]);
       const e=PREVIEW[PREVIEW.length-1];
-      molecule(e[0],e[1],5,'rgba(255,255,255,.5)',0.55);
+      molecule(e[0],e[1],9,'rgba(255,255,255,.5)',0.55);
       cx.fillStyle='rgba(255,255,255,.6)';
       cx.font='12px "DM Sans",sans-serif'; cx.textAlign='center';
       cx.fillText('Predicted landing', e[0], e[1]-18);
@@ -728,8 +728,8 @@ function start(){{
     const rT = THROWER==='right' ? tilt : 0;
     scene(lT, rT, false, false, false, false);
 
-    // Molecule flying
-    if(flyIdx > 1){{
+    // Trail from launch point (fingertip) to current molecule position
+    if(flyIdx >= 1){{
       cx.strokeStyle='rgba(255,255,255,.6)';
       cx.lineWidth=2.5; cx.setLineDash([7,4]);
       cx.beginPath(); cx.moveTo(TRAJ[0][0],TRAJ[0][1]);
@@ -737,7 +737,7 @@ function start(){{
       cx.stroke(); cx.setLineDash([]);
     }}
     const ti = Math.floor(Math.min(flyIdx, total-1));
-    molecule(TRAJ[ti][0], TRAJ[ti][1], 7, '#ffaa88');
+    molecule(TRAJ[ti][0], TRAJ[ti][1], 12, '#ffaa88');
   }}
 
   function doFly(){{
