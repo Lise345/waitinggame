@@ -32,8 +32,8 @@ C_RED    = "#E84040"
 # ── load images ────────────────────────────────────────────────────────────────
 def _img_data(filename):
     here = os.path.dirname(os.path.abspath(__file__))
-    for fname in [filename, filename.replace(".png","_crop.jpg"),
-                  filename.replace(".png",".jpg")]:
+    for fname in [filename, filename.replace(".png","_final.png"),
+                  filename.replace(".png","_crop.jpg")]:
         path = os.path.join(here, fname)
         if os.path.exists(path):
             with open(path, "rb") as f: data = f.read()
@@ -42,8 +42,8 @@ def _img_data(filename):
             return b64, mime
     return "", "image/png"
 
-HUMAN_B64, HUMAN_MIME = _img_data("humanhand_crop.jpg")
-ROBOT_B64, ROBOT_MIME = _img_data("robothand_crop.jpg")
+HUMAN_B64, HUMAN_MIME = _img_data("humanhand_final.png")
+ROBOT_B64, ROBOT_MIME = _img_data("robothand_final.png")
 
 # ── file locking ──────────────────────────────────────────────────────────────
 if os.name != "nt":
@@ -530,10 +530,8 @@ canvas{{width:100%;display:block;border-radius:12px}}</style></head><body>
 <canvas id="c" width="900" height="400"></canvas>
 <script>
 const cv=document.getElementById('c'),cx=cv.getContext('2d'),W=900,H=400;
-
-// Pivot points (base of each launcher)
 const LPX={LPX},LPY={LPY},RPX={RPX},RPY={RPY};
-const HAND_LEN=110;   // pixels from pivot to fingertip
+const HAND_LEN=115;  // pivot-to-fingertip distance on canvas
 
 const PHASE="{phase}";
 const TRAJ={traj_js};
@@ -545,22 +543,24 @@ const ANIM_DUR=2.0;
 const PREVIEW={preview_js};
 const ACTIVE_TURN="{active_turn}";
 
-// Angles (degrees from vertical, tilting toward centre)
-const L_ANG={l_ang};   // left hand current aim angle
-const R_ANG={r_ang};   // right hand current aim angle
-const THROW_ANG={throw_angle}; // angle used for the last throw
+// Aim angles in degrees — how far the hand tilts BACK (away from target).
+// Left hand tilts left (negative canvas rotation), right hand tilts right.
+// 0° = perfectly vertical (at rest / just released).
+const L_AIM={l_ang};
+const R_AIM={r_ang};
+const THROW_ANG={throw_angle};
 
 // Images
 const humanImg=new Image(), robotImg=new Image();
 humanImg.src='data:{HUMAN_MIME};base64,{HUMAN_B64}';
 robotImg.src='data:{ROBOT_MIME};base64,{ROBOT_B64}';
 let ready=0;
-const onLoad=()=>{{if(++ready===2)start();}};
+const onLoad=()=>{{if(++ready>=2) start();}};
 humanImg.onload=onLoad; robotImg.onload=onLoad;
 humanImg.onerror=onLoad; robotImg.onerror=onLoad;
-setTimeout(()=>{{if(ready<2){{ready=2;start();}}}},1200);
+setTimeout(()=>{{if(ready<2){{ready=2; start();}}}}, 1200);
 
-// ── draw helpers ──────────────────────────────────────────────────────────────
+// ── helpers ───────────────────────────────────────────────────────────────────
 function bg(){{
   const g=cx.createLinearGradient(0,0,W,H);
   g.addColorStop(0,'#3558d4'); g.addColorStop(.55,'#8060b8'); g.addColorStop(1,'#e07a72');
@@ -568,67 +568,73 @@ function bg(){{
 }}
 
 function hills(){{
-  // Left hill
   cx.fillStyle='rgba(255,255,255,.18)';
-  cx.beginPath(); cx.ellipse(LPX,H,110,55,0,Math.PI,0); cx.fill();
-  // Right hill
-  cx.fillStyle='rgba(255,255,255,.18)';
-  cx.beginPath(); cx.ellipse(RPX,H,110,55,0,Math.PI,0); cx.fill();
-  // subtle hill highlight
-  cx.fillStyle='rgba(255,255,255,.08)';
-  cx.beginPath(); cx.ellipse(LPX,H-2,80,38,0,Math.PI,0); cx.fill();
-  cx.beginPath(); cx.ellipse(RPX,H-2,80,38,0,Math.PI,0); cx.fill();
+  cx.beginPath(); cx.ellipse(LPX,H,120,58,0,Math.PI,0); cx.fill();
+  cx.beginPath(); cx.ellipse(RPX,H,120,58,0,Math.PI,0); cx.fill();
+  cx.fillStyle='rgba(255,255,255,.09)';
+  cx.beginPath(); cx.ellipse(LPX,H-2,85,40,0,Math.PI,0); cx.fill();
+  cx.beginPath(); cx.ellipse(RPX,H-2,85,40,0,Math.PI,0); cx.fill();
 }}
 
 function disk(px,py,col){{
-  // Launcher disk at pivot
-  const rx=28, ry=10;
-  // shadow
-  cx.fillStyle='rgba(0,0,0,.3)';
-  cx.beginPath(); cx.ellipse(px,py+3,rx,ry,0,0,Math.PI*2); cx.fill();
-  // main disk
-  const g=cx.createLinearGradient(px-rx,py-ry,px+rx,py+ry);
-  g.addColorStop(0,'rgba(255,255,255,.35)');
-  g.addColorStop(.5,col);
-  g.addColorStop(1,'rgba(0,0,0,.4)');
+  cx.fillStyle='rgba(0,0,0,.28)';
+  cx.beginPath(); cx.ellipse(px,py+4,30,11,0,0,Math.PI*2); cx.fill();
+  const g=cx.createLinearGradient(px-30,py-10,px+30,py+10);
+  g.addColorStop(0,'rgba(255,255,255,.3)'); g.addColorStop(.5,col); g.addColorStop(1,'rgba(0,0,0,.35)');
   cx.fillStyle=g;
-  cx.beginPath(); cx.ellipse(px,py,rx,ry,0,0,Math.PI*2); cx.fill();
-  // rim highlight
-  cx.strokeStyle='rgba(255,255,255,.5)'; cx.lineWidth=1.5;
-  cx.beginPath(); cx.ellipse(px,py-1,rx-4,ry-2,0,Math.PI,0); cx.stroke();
+  cx.beginPath(); cx.ellipse(px,py,30,11,0,0,Math.PI*2); cx.fill();
+  cx.strokeStyle='rgba(255,255,255,.45)'; cx.lineWidth=1.5;
+  cx.beginPath(); cx.ellipse(px,py-1,22,6,0,Math.PI,0); cx.stroke();
 }}
 
-function drawHand(img, px, py, angleDeg, flip, flash, hilight){{
-  // angleDeg = degrees from vertical (0=up, positive tilts toward centre)
-  // flip=true for right hand (mirror image)
-  // We rotate around the pivot point (bottom of arm)
-  const rad = (flip ? -1 : 1) * angleDeg * Math.PI/180;
+/**
+ * drawHand:
+ *   px,py   = pivot point (arm base, centre of launcher disk)
+ *   tiltDeg = degrees the hand tilts BACK from vertical
+ *             Left hand: positive tilt = arm leans LEFT  (away from target)
+ *             Right hand: positive tilt = arm leans RIGHT (away from target)
+ *   isRight = true for the right (robot) hand
+ *   flash   = hit flash effect
+ */
+function drawHand(img, px, py, tiltDeg, isRight, flash){{
+  if(!img.complete || img.naturalWidth===0) return;
 
-  // Image dimensions: draw the arm so its bottom centre aligns with pivot
-  const IW=70, IH=170;  // drawn size on canvas
+  // Rotation: left leans left = negative radians, right leans right = positive
+  const sign   = isRight ? 1 : -1;
+  const rad    = sign * tiltDeg * Math.PI / 180;
+  const IW=72, IH=175;  // drawn size
 
   cx.save();
-  cx.translate(px, py);
+  cx.translate(px, py);   // pivot at arm base
   cx.rotate(rad);
 
-  if(flash){{ cx.shadowColor='#E84040'; cx.shadowBlur=25; }}
-  if(hilight){{ cx.shadowColor='#ffdd88'; cx.shadowBlur=18; }}
+  if(flash){{ cx.shadowColor='#E84040'; cx.shadowBlur=28; }}
 
-  if(flip){{
-    // Mirror horizontally
-    cx.scale(-1,1);
-    cx.drawImage(img, -IW/2, -IH, IW, IH);
-  }} else {{
-    cx.drawImage(img, -IW/2, -IH, IW, IH);
+  if(isRight){{
+    // Mirror robot hand so it faces left (toward centre)
+    cx.scale(-1, 1);
   }}
+
+  // Draw image so bottom-centre aligns with pivot (0,0 after translate)
+  cx.drawImage(img, -IW/2, -IH, IW, IH);
   cx.restore();
 }}
 
+/** Fingertip world position for a given pivot + tilt */
+function tipPos(px, py, tiltDeg, isRight){{
+  const sign = isRight ? 1 : -1;
+  const rad  = sign * tiltDeg * Math.PI / 180;
+  // Tip is HAND_LEN above pivot in the rotated frame
+  return [
+    px + Math.sin(rad) * HAND_LEN,
+    py - Math.cos(rad) * HAND_LEN
+  ];
+}}
+
 function molecule(x,y,r,col,alpha){{
-  alpha = alpha===undefined?1:alpha;
-  cx.globalAlpha=alpha;
+  cx.globalAlpha = (alpha===undefined) ? 1 : alpha;
   cx.fillStyle=col; cx.beginPath(); cx.arc(x,y,r,0,Math.PI*2); cx.fill();
-  cx.strokeStyle=col; cx.lineWidth=2;
+  cx.strokeStyle=col; cx.lineWidth=2.2;
   [[-r*1.9,-r*1.1],[r*1.9,-r*.8],[0,-r*2.2]].forEach(([dx,dy])=>{{
     cx.beginPath(); cx.moveTo(x,y); cx.lineTo(x+dx,y+dy); cx.stroke();
     cx.fillStyle=col; cx.beginPath(); cx.arc(x+dx,y+dy,r*.6,0,Math.PI*2); cx.fill();
@@ -636,156 +642,128 @@ function molecule(x,y,r,col,alpha){{
   cx.globalAlpha=1;
 }}
 
-// Compute fingertip position given pivot, angle, hand length
-function tipPos(px,py,angleDeg,flip){{
-  const rad=(flip?-1:1)*angleDeg*Math.PI/180;
-  return [px + Math.sin(rad)*HAND_LEN, py - Math.cos(rad)*HAND_LEN];
-}}
-
-function scene(lAngle, rAngle, lFlash, rFlash, lHit, rHit){{
+/**
+ * Full scene draw.
+ * lTilt / rTilt = current tilt angles for left/right hand
+ * lHit / rHit   = flash the target hand red
+ * showMoleculeL / showMoleculeR = show held molecule at fingertip
+ */
+function scene(lTilt, rTilt, lHit, rHit, showMoleculeL, showMoleculeR){{
   bg(); hills();
-
-  // Hands (drawn BEHIND disks)
-  drawHand(humanImg, LPX, LPY, lAngle, false, lFlash, lHit);
-  drawHand(robotImg,  RPX, RPY, rAngle, true,  rFlash, rHit);
-
-  // Launcher disks on top
+  drawHand(humanImg, LPX, LPY, lTilt, false, lHit);
+  drawHand(robotImg,  RPX, RPY, rTilt, true,  rHit);
   disk(LPX, LPY, '{C_PINK}');
   disk(RPX, RPY, '{C_BLUE}');
+  if(showMoleculeL){{
+    const [tx,ty]=tipPos(LPX,LPY,lTilt,false);
+    molecule(tx,ty,7,'#E84040');
+  }}
+  if(showMoleculeR){{
+    const [tx,ty]=tipPos(RPX,RPY,rTilt,true);
+    molecule(tx,ty,7,'#E84040');
+  }}
 }}
 
-// ── animation state ───────────────────────────────────────────────────────────
-// Hand angle animation: during throw = animate from aim→90° (follow-through)
-// then settle back to 0 (rest). During voting = show current aim angle.
-
-let frame=0, stage='idle';
-// stages: 'idle' | 'fly' | 'flash' | 'recoil' | 'done'
-let flyIdx=0, flashN=0, flashOn=false;
-let lAngle=L_ANG, rAngle=R_ANG;
-
-// Easing
+// ── easing ────────────────────────────────────────────────────────────────────
 function easeOut(t){{ return 1-(1-t)*(1-t); }}
+function easeInOut(t){{ return t<.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2; }}
 function lerp(a,b,t){{ return a+(b-a)*t; }}
 
+// ── main ──────────────────────────────────────────────────────────────────────
 function start(){{
+
   if(PHASE==='voting'){{
-    // Static scene showing current aim angles
-    scene(L_ANG, R_ANG, false, false, false, false);
-    // Preview arc for active side
-    if(PREVIEW&&PREVIEW.length>1){{
+    // Show both hands: ACTIVE hand tilted back at aim angle, other hand vertical
+    const lTilt = (ACTIVE_TURN==='left')  ? L_AIM : 0;
+    const rTilt = (ACTIVE_TURN==='right') ? R_AIM : 0;
+    scene(lTilt, rTilt, false, false,
+          ACTIVE_TURN==='left',   // show molecule on active hand
+          ACTIVE_TURN==='right');
+
+    // Preview arc from tip of active hand
+    if(PREVIEW && PREVIEW.length>1){{
       cx.strokeStyle='rgba(255,255,255,.45)';
       cx.lineWidth=2.5; cx.setLineDash([10,6]);
       cx.beginPath(); cx.moveTo(PREVIEW[0][0],PREVIEW[0][1]);
       for(let i=1;i<PREVIEW.length;i+=3) cx.lineTo(PREVIEW[i][0],PREVIEW[i][1]);
       cx.stroke(); cx.setLineDash([]);
       const e=PREVIEW[PREVIEW.length-1];
-      molecule(e[0],e[1],5,'rgba(255,255,255,.5)',0.6);
+      molecule(e[0],e[1],5,'rgba(255,255,255,.5)',0.55);
       cx.fillStyle='rgba(255,255,255,.6)';
       cx.font='12px "DM Sans",sans-serif'; cx.textAlign='center';
-      cx.fillText('Predicted landing',e[0],e[1]-18);
+      cx.fillText('Predicted landing', e[0], e[1]-18);
     }}
     return;
   }}
 
-  // Result phase: play animation
-  // Phase 1: banana flies (ANIM_DUR seconds)
-  // Phase 2: hit flash
-  // Phase 3: recoil — thrower's hand swings from THROW_ANG to 90° then back to 0°
+  // ── RESULT PHASE ─────────────────────────────────────────────────────────────
+  // Timeline:
+  //   0 → ANIM_DUR s    : throw animation — hand swings from THROW_ANG tilt → 0° vertical
+  //                        while molecule flies along trajectory
+  //   ANIM_DUR → +1.8 s : hit flash (if hit)
+  //   after flash        : both hands rest at 0°
 
-  const total=TRAJ.length;
-  const flySteps=Math.round(ANIM_DUR*60);
-  const flySkip=total/flySteps;
+  if(!TRAJ || !TRAJ.length){{ scene(0,0,false,false,false,false); return; }}
 
-  // If we're resuming mid-animation after a rerun
-  const sf=Math.min(RES_AGE/ANIM_DUR,1.0);
-  flyIdx=Math.floor(sf*total);
-  const alreadyFlying = sf<1.0;
-  const alreadyFlashed= RES_AGE>(ANIM_DUR+0.5);
+  const total      = TRAJ.length;
+  const flyFrames  = Math.round(ANIM_DUR * 60);
+  const flySkip    = total / flyFrames;
 
-  lAngle = (THROWER==='left') ? THROW_ANG : L_ANG;
-  rAngle = (THROWER==='right')? THROW_ANG : R_ANG;
+  const sf         = Math.min(RES_AGE / ANIM_DUR, 1.0);
+  let   flyIdx     = Math.floor(sf * total);
+  const skipToFlash= sf >= 1.0;
+  const skipToRest = RES_AGE > (ANIM_DUR + 2.0);
 
-  if(alreadyFlashed){{
-    // Skip to recoil
-    doRecoil();
-  }} else if(alreadyFlying){{
-    doFly();
-  }} else {{
-    doFly();
+  // Non-throwing hand always at 0
+  // Throwing hand: starts at THROW_ANG tilt, sweeps to 0 as molecule flies
+  function getThrowerTilt(progress){{
+    // progress 0→1 over ANIM_DUR; ease the swing from tilt→0
+    return lerp(THROW_ANG, 0, easeOut(progress));
   }}
 
-  function drawFlyFrame(){{
-    const tAngle = (THROWER==='left') ? lAngle : rAngle;
-    const oAngle = (THROWER==='left') ? R_ANG  : L_ANG;
-    const lA = (THROWER==='left') ? tAngle : L_ANG;
-    const rA = (THROWER==='right')? tAngle : R_ANG;
-    scene(lA, rA, false, false, false, false);
+  function drawFly(){{
+    const progress = flyIdx / total;
+    const tilt     = getThrowerTilt(progress);
+    const lT = THROWER==='left'  ? tilt : 0;
+    const rT = THROWER==='right' ? tilt : 0;
+    scene(lT, rT, false, false, false, false);
 
-    // Draw trail
-    if(flyIdx>1){{
+    // Molecule flying
+    if(flyIdx > 1){{
       cx.strokeStyle='rgba(255,255,255,.6)';
       cx.lineWidth=2.5; cx.setLineDash([7,4]);
       cx.beginPath(); cx.moveTo(TRAJ[0][0],TRAJ[0][1]);
       for(let i=1;i<=Math.floor(flyIdx);i++) cx.lineTo(TRAJ[i][0],TRAJ[i][1]);
       cx.stroke(); cx.setLineDash([]);
     }}
-    const ti=Math.floor(flyIdx);
-    molecule(TRAJ[ti][0],TRAJ[ti][1],7,'#ffaa88');
+    const ti = Math.floor(Math.min(flyIdx, total-1));
+    molecule(TRAJ[ti][0], TRAJ[ti][1], 7, '#ffaa88');
   }}
 
   function doFly(){{
-    flyIdx=Math.min(flyIdx+flySkip, total-1);
-    drawFlyFrame();
-    if(flyIdx<total-1){{
-      requestAnimationFrame(doFly);
-    }} else {{
-      // molecule landed — show flash
-      setTimeout(doFlash, 100);
-    }}
+    flyIdx = Math.min(flyIdx + flySkip, total-1);
+    drawFly();
+    if(flyIdx < total-1) requestAnimationFrame(doFly);
+    else setTimeout(doFlash, 80);
   }}
 
+  let flashN=0, flashOn=false;
   function doFlash(){{
-    flashOn=!flashOn; flashN++;
-    const lHit=DID_HIT&&HIT_SIDE==='left' &&flashOn;
-    const rHit=DID_HIT&&HIT_SIDE==='right'&&flashOn;
-    const lF = THROWER==='left'  && flashOn;
-    const rF = THROWER==='right' && flashOn;
-    scene(
-      (THROWER==='left') ? THROW_ANG : L_ANG,
-      (THROWER==='right')? THROW_ANG : R_ANG,
-      lF, rF, lHit, rHit
-    );
-    // keep trail visible
+    flashOn = !flashOn; flashN++;
+    const lH = DID_HIT && HIT_SIDE==='left'  && flashOn;
+    const rH = DID_HIT && HIT_SIDE==='right' && flashOn;
+    scene(0, 0, lH, rH, false, false);
+    // keep trail
     cx.strokeStyle='rgba(255,255,255,.2)'; cx.lineWidth=1.5; cx.setLineDash([6,4]);
     cx.beginPath(); cx.moveTo(TRAJ[0][0],TRAJ[0][1]);
     TRAJ.forEach(([x,y])=>cx.lineTo(x,y)); cx.stroke(); cx.setLineDash([]);
-
-    if(flashN<10) setTimeout(doFlash, 160);
-    else doRecoil();
+    if(flashN < 10) setTimeout(doFlash, 160);
+    else scene(0, 0, false, false, false, false);
   }}
 
-  function doRecoil(){{
-    // Animate thrower's hand from THROW_ANG → 110° (overshoot) → 0° (rest)
-    const RECOIL_FRAMES=45;
-    let rf=0;
-    function recoilStep(){{
-      rf++;
-      const t=rf/RECOIL_FRAMES;
-      let angle;
-      if(t<0.4){{
-        // swing forward past vertical to ~110°
-        angle=lerp(THROW_ANG, 110, easeOut(t/0.4));
-      }} else {{
-        // swing back to rest (0°)
-        angle=lerp(110, 0, easeOut((t-0.4)/0.6));
-      }}
-      const lA=(THROWER==='left') ? angle : L_ANG;
-      const rA=(THROWER==='right')? angle : R_ANG;
-      scene(lA, rA, false, false, false, false);
-      if(rf<RECOIL_FRAMES) requestAnimationFrame(recoilStep);
-    }}
-    recoilStep();
-  }}
+  if(skipToRest)      {{ scene(0,0,false,false,false,false); }}
+  else if(skipToFlash) {{ doFlash(); }}
+  else                 {{ drawFly(); requestAnimationFrame(doFly); }}
 }}
 </script></body></html>"""
 
