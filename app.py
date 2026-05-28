@@ -14,7 +14,7 @@ st.set_page_config(page_title="Breaking Down the Building Blocks",
 # ── constants ─────────────────────────────────────────────────────────────────
 VOTES_FILE  = "votes.json"
 GAME_FILE   = "game_state.json"
-TURN_SECS   = 15
+TURN_SECS   = 25
 RESULT_SECS = 7
 
 # Canvas 900×400. Pivot points at base of each hand (centre of launcher disk)
