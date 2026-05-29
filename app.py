@@ -1,5 +1,5 @@
 """
-Breaking Down the Building Blocks — PhD Defence Waiting Game
+Breaking Down the Building Blocks — PhD defense Waiting Game
 ?team=left  → human-hand voter page
 ?team=right → robot-hand voter page
 (no param)  → main game screen
@@ -398,7 +398,7 @@ st.markdown("""
   </div>
   <div style="font-size:.74rem;color:rgba(255,255,255,.55);letter-spacing:2px;
               text-transform:uppercase;margin-top:2px">
-    PhD Defence Waiting Game &nbsp;·&nbsp; Lise Vermeersch &nbsp;·&nbsp; VUB
+    PhD Defense Waiting Game &nbsp;·&nbsp; Lise Vermeersch &nbsp;·&nbsp; VUB
   </div>
   <button onclick="toggleFS()" id="fsBtn"
     style="position:absolute;top:8px;right:0;background:rgba(0,0,0,.4);
