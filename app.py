@@ -106,7 +106,7 @@ def trajectory(angle_deg, power, direction, wind):
     The hand (length 110px on canvas) points at angle_deg from vertical.
     Left hand: 0°=straight up, positive angle tilts right (toward target).
     """
-    hand_len = 115  # pixels from pivot to fingertip — must match JS HAND_LEN=115
+    hand_len = 173  # pixels from pivot to fingertip — must match JS HAND_LEN=173
     if direction == "left":
         # angle from vertical, tilting right
         tip_x = LPX + math.sin(math.radians(angle_deg)) * hand_len
@@ -234,43 +234,61 @@ html,body,[class*="css"]{{font-family:'DM Sans',sans-serif;
         st.markdown(f'<div class="bv">{angle}°</div>', unsafe_allow_html=True)
 
         # Live arc preview SVG
-        pts = trajectory(angle, 62, team, 0)
-        def sc(px, py, W=260, H=120):
-            return round(px*W/900,1), round(py*H/420,1)
+        # SVG canvas 260x130 maps from game canvas 900x420
+        SVG_W, SVG_H, C_W, C_H = 260, 130, 900, 420
+        wind = game.get('wind', 0)
+        def sc(px, py): return round(px*SVG_W/C_W,1), round(py*SVG_H/C_H,1)
+
+        pts = trajectory(angle, 62, team, wind)
         path_d = " ".join(("M" if i==0 else "L")+f"{sc(px,py)[0]},{sc(px,py)[1]}"
                           for i,(px,py) in enumerate(pts[::4]))
-        lx,ly = sc(LPX,LPY); rx,ry = sc(RPX,RPY); ex,ey = sc(*pts[-1])
-        # hand line preview
-        hl  = 28  # hand length in preview
-        if team == "left":
-            htx = lx + math.sin(math.radians(angle))*hl
-            hty = ly - math.cos(math.radians(angle))*hl
-        else:
-            htx = rx - math.sin(math.radians(angle))*hl
-            hty = ry - math.cos(math.radians(angle))*hl
+        lx,ly   = sc(LPX,LPY)
+        rx,ry   = sc(RPX,RPY)
+        ex,ey   = sc(*pts[-1])
+        tip0x, tip0y = sc(pts[0][0], pts[0][1])  # arc start = molecule position
+        inactive_tip_y = round(ly - 173*SVG_H/C_H, 1)
+
+        w_col_svg = "#4fc3f7" if abs(wind)<2 else "#ffcc44" if abs(wind)<4 else "#E84040"
+        w_arrow   = "&rarr;" if wind>0 else ("&larr;" if wind<0 else "&middot;")
+        w_str_svg = f"{w_arrow} {abs(wind):.1f}"
+
+        _tc = C_PINK if team=="left" else C_BLUE
+        _oc = C_BLUE  if team=="left" else C_PINK
+        _ax, _ay = (lx,ly) if team=="left" else (rx,ry)
+        _ox, _oy = (rx,ry) if team=="left" else (lx,ly)
+        _itx = _ox  # inactive tip x (straight up)
+
         st.markdown(f"""
-        <svg viewBox="0 0 260 125"
+        <svg viewBox="0 0 260 130"
              style="width:100%;background:rgba(0,0,0,.4);border-radius:10px;
                     margin:4px 0 12px;border:1px solid rgba(255,255,255,.12)">
           <!-- hills -->
-          <ellipse cx="{lx}" cy="{ly+4}" rx="22" ry="10" fill="rgba(255,255,255,.15)"/>
-          <ellipse cx="{rx}" cy="{ry+4}" rx="22" ry="10" fill="rgba(255,255,255,.15)"/>
+          <ellipse cx="{lx}" cy="{ly+4}" rx="22" ry="10" fill="rgba(255,255,255,.12)"/>
+          <ellipse cx="{rx}" cy="{ry+4}" rx="22" ry="10" fill="rgba(255,255,255,.12)"/>
           <!-- disks -->
           <ellipse cx="{lx}" cy="{ly}" rx="10" ry="4" fill="{C_PINK}" opacity=".8"/>
           <ellipse cx="{rx}" cy="{ry}" rx="10" ry="4" fill="{C_BLUE}" opacity=".8"/>
-          <!-- hand lines -->
-          <line x1="{lx}" y1="{ly}" x2="{htx}" y2="{hty}"
-                stroke="{C_PINK}" stroke-width="3" stroke-linecap="round"/>
-          <line x1="{rx}" y1="{ry}" x2="{rx - math.sin(math.radians(angle))*hl:.1f}"
-                y2="{ry - math.cos(math.radians(angle))*hl:.1f}"
-                stroke="{C_BLUE}" stroke-width="3" stroke-linecap="round"/>
-          <!-- arc -->
+          <!-- inactive hand straight up -->
+          <line x1="{_ox}" y1="{_oy}" x2="{_itx}" y2="{inactive_tip_y}"
+                stroke="{_oc}" stroke-width="3" stroke-linecap="round" opacity=".4"/>
+          <!-- active hand tilted back to aim angle -->
+          <line x1="{_ax}" y1="{_ay}" x2="{tip0x}" y2="{tip0y}"
+                stroke="{_tc}" stroke-width="3" stroke-linecap="round"/>
+          <!-- molecule held at tip -->
+          <circle cx="{tip0x}" cy="{tip0y}" r="4" fill="#ffaa88"/>
+          <!-- trajectory arc from molecule tip -->
           <path d="{path_d}" fill="none" stroke="white" stroke-width="2"
-                stroke-dasharray="5 3" opacity=".65"/>
-          <!-- tip -->
-          <circle cx="{ex}" cy="{ey}" r="4" fill="white" opacity=".75"/>
-          <text x="130" y="122" text-anchor="middle" fill="rgba(255,255,255,.3)"
-                font-size="7" font-family="DM Sans,sans-serif">trajectory preview (no wind)</text>
+                stroke-dasharray="5 3" opacity=".6"/>
+          <!-- landing dot -->
+          <circle cx="{ex}" cy="{ey}" r="4" fill="white" opacity=".7"/>
+          <!-- wind label top-centre -->
+          <rect x="90" y="3" width="80" height="16" rx="4"
+                fill="rgba(0,0,0,.4)"/>
+          <text x="130" y="14" text-anchor="middle" fill="{w_col_svg}"
+                font-size="9" font-weight="bold"
+                font-family="DM Sans,sans-serif">&#x1F4A8; wind {wind:+.1f}</text>
+          <text x="130" y="127" text-anchor="middle" fill="rgba(255,255,255,.28)"
+                font-size="7" font-family="DM Sans,sans-serif">trajectory with wind</text>
         </svg>""", unsafe_allow_html=True)
 
         st.markdown(f"<div style='font-size:.84rem;color:#ddd;margin:0 0 4px'>"
@@ -392,21 +410,32 @@ st.markdown("""
 </div>
 <script>
 function toggleFS(){
-  if(!document.fullscreenElement){
-    document.documentElement.requestFullscreen().catch(()=>{});
-    document.getElementById('fsBtn').textContent='\u2715 Exit fullscreen';
-  } else {
-    document.exitFullscreen();
-    document.getElementById('fsBtn').textContent='\u26f6 Fullscreen';
+  // Streamlit runs inside an iframe — request fullscreen on the iframe element
+  // as seen from the parent, or fall back to the local document element.
+  try {
+    const el = window.frameElement || document.documentElement;
+    if(!document.fullscreenElement && !(document.webkitFullscreenElement)){
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      if(req) req.call(el).catch(()=>{});
+    } else {
+      const exit = document.exitFullscreen || document.webkitExitFullscreen;
+      if(exit) exit.call(document);
+    }
+  } catch(e) {
+    // fallback: open in new tab so user can use browser fullscreen (F11)
+    window.open(window.location.href, '_blank');
   }
 }
 document.addEventListener('keydown', e=>{
-  if(e.key==='f'||e.key==='F') toggleFS();
+  if((e.key==='f'||e.key==='F') && !e.ctrlKey && !e.metaKey) toggleFS();
 });
-document.addEventListener('fullscreenchange', ()=>{
+document.addEventListener('fullscreenchange', updateBtn);
+document.addEventListener('webkitfullscreenchange', updateBtn);
+function updateBtn(){
   const btn=document.getElementById('fsBtn');
-  if(btn) btn.textContent = document.fullscreenElement ? '\u2715 Exit fullscreen' : '\u26f6 Fullscreen';
-});
+  const inFS = !!(document.fullscreenElement||document.webkitFullscreenElement);
+  if(btn) btn.textContent = inFS ? '\u2715 Exit fullscreen' : '\u26f6 Fullscreen';
+}
 </script>""", unsafe_allow_html=True)
 
 # ── score + wind card ─────────────────────────────────────────────────────────
@@ -556,7 +585,7 @@ canvas{{width:100%;display:block;border-radius:12px}}</style></head><body>
 <script>
 const cv=document.getElementById('c'),cx=cv.getContext('2d'),W=900,H=400;
 const LPX={LPX},LPY={LPY},RPX={RPX},RPY={RPY};
-const HAND_LEN=115;  // pivot-to-fingertip distance on canvas
+const HAND_LEN=173;  // pivot-to-fingertip: image is drawn IH=175px, tip ~2px from top
 
 const PHASE="{phase}";
 const TRAJ={traj_js};
