@@ -372,9 +372,9 @@ html,body,[class*="css"],
 .lc{{color:{C_PINK}}}.rc{{color:{C_BLUE}}}
 </style>""", unsafe_allow_html=True)
 
-# ── title ─────────────────────────────────────────────────────────────────────
+# ── title + fullscreen ────────────────────────────────────────────────────────
 st.markdown("""
-<div style="text-align:center;padding:8px 0 5px">
+<div style="text-align:center;padding:8px 0 5px;position:relative">
   <div style="font-family:'DM Serif Display',serif;font-size:2.6rem;
               font-weight:400;color:#fff;text-shadow:0 2px 12px rgba(0,0,0,.4)">
     Breaking Down the Building Blocks
@@ -383,7 +383,31 @@ st.markdown("""
               text-transform:uppercase;margin-top:2px">
     PhD Defence Waiting Game &nbsp;·&nbsp; Lise Vermeersch &nbsp;·&nbsp; VUB
   </div>
-</div>""", unsafe_allow_html=True)
+  <button onclick="toggleFS()" id="fsBtn"
+    style="position:absolute;top:8px;right:0;background:rgba(0,0,0,.4);
+           border:1px solid rgba(255,255,255,.25);border-radius:8px;
+           color:rgba(255,255,255,.7);font-size:.8rem;padding:5px 10px;
+           cursor:pointer;font-family:'DM Sans',sans-serif;letter-spacing:.5px"
+    title="Fullscreen (F)">⛶ Fullscreen</button>
+</div>
+<script>
+function toggleFS(){
+  if(!document.fullscreenElement){
+    document.documentElement.requestFullscreen().catch(()=>{});
+    document.getElementById('fsBtn').textContent='\u2715 Exit fullscreen';
+  } else {
+    document.exitFullscreen();
+    document.getElementById('fsBtn').textContent='\u26f6 Fullscreen';
+  }
+}
+document.addEventListener('keydown', e=>{
+  if(e.key==='f'||e.key==='F') toggleFS();
+});
+document.addEventListener('fullscreenchange', ()=>{
+  const btn=document.getElementById('fsBtn');
+  if(btn) btn.textContent = document.fullscreenElement ? '\u2715 Exit fullscreen' : '\u26f6 Fullscreen';
+});
+</script>""", unsafe_allow_html=True)
 
 # ── score + wind card ─────────────────────────────────────────────────────────
 w     = game["wind"]
@@ -514,6 +538,7 @@ with col_c:
     l_ang, l_pwr = _avg("left")
     r_ang, r_pwr = _avg("right")
     active_turn  = game["turn"]
+    wind_val     = game["wind"]
 
     # Preview trajectory for the active side
     if phase == "voting":
@@ -620,15 +645,23 @@ function drawHand(img, px, py, tiltDeg, isRight, flash){{
   cx.restore();
 }}
 
-/** Fingertip world position for a given pivot + tilt */
+/** Fingertip world position — must match Python trajectory() tip calculation exactly.
+ *  Python left:  tip_x = LPX + sin(angle)*hand_len  (tilts toward centre = right)
+ *  Python right: tip_x = RPX - sin(angle)*hand_len  (tilts toward centre = left)
+ *  JS drawHand rotation: left hand sign=-1 so rad=-angle → sin(rad)=-sin(angle)
+ *    → we need to NEGATE the JS rotation sign here to match Python.
+ */
 function tipPos(px, py, tiltDeg, isRight){{
-  const sign = isRight ? 1 : -1;
-  const rad  = sign * tiltDeg * Math.PI / 180;
-  // Tip is HAND_LEN above pivot in the rotated frame
-  return [
-    px + Math.sin(rad) * HAND_LEN,
-    py - Math.cos(rad) * HAND_LEN
-  ];
+  const rad = tiltDeg * Math.PI / 180;  // always positive, direction handled below
+  if(isRight){{
+    // right hand tip moves LEFT toward centre
+    return [ px - Math.sin(rad)*HAND_LEN,
+             py - Math.cos(rad)*HAND_LEN ];
+  }} else {{
+    // left hand tip moves RIGHT toward centre  (matches Python: LPX + sin*len)
+    return [ px + Math.sin(rad)*HAND_LEN,
+             py - Math.cos(rad)*HAND_LEN ];
+  }}
 }}
 
 function molecule(x,y,r,col,alpha){{
@@ -656,11 +689,11 @@ function scene(lTilt, rTilt, lHit, rHit, showMoleculeL, showMoleculeR){{
   disk(RPX, RPY, '{C_BLUE}');
   if(showMoleculeL){{
     const [tx,ty]=tipPos(LPX,LPY,lTilt,false);
-    molecule(tx,ty,12,'#E84040');
+    molecule(tx,ty,12,'#ffaa88');
   }}
   if(showMoleculeR){{
     const [tx,ty]=tipPos(RPX,RPY,rTilt,true);
-    molecule(tx,ty,12,'#E84040');
+    molecule(tx,ty,12,'#ffaa88');
   }}
 }}
 
@@ -677,8 +710,31 @@ function start(){{
     const lTilt = (ACTIVE_TURN==='left')  ? L_AIM : 0;
     const rTilt = (ACTIVE_TURN==='right') ? R_AIM : 0;
     scene(lTilt, rTilt, false, false,
-          ACTIVE_TURN==='left',   // show molecule on active hand
+          ACTIVE_TURN==='left',
           ACTIVE_TURN==='right');
+
+    // Wind indicator
+    const windVal = {wind_val:.1f};
+    const windStr = windVal===0 ? 'No wind' :
+                    (windVal>0 ? '→ ' : '← ') +
+                    (Math.abs(windVal)<2 ? 'Light' : Math.abs(windVal)<4 ? 'Moderate' : 'Strong') +
+                    ' wind (' + (windVal>0?'+':'') + windVal.toFixed(1) + ')';
+    const windCol = Math.abs(windVal)<2 ? '#4fc3f7' : Math.abs(windVal)<4 ? '#ffcc44' : '#E84040';
+    // Bar background
+    cx.fillStyle='rgba(0,0,0,.35)';
+    cx.beginPath(); cx.roundRect(W/2-120, 12, 240, 28, 6); cx.fill();
+    // Bar fill
+    const barMax=100, barW=Math.abs(windVal)/5*barMax;
+    const barX = windVal>=0 ? W/2 : W/2-barW;
+    cx.fillStyle=windCol; cx.globalAlpha=0.7;
+    cx.beginPath(); cx.roundRect(barX, 17, barW, 18, 3); cx.fill();
+    cx.globalAlpha=1;
+    // Centre tick
+    cx.strokeStyle='rgba(255,255,255,.4)'; cx.lineWidth=1;
+    cx.beginPath(); cx.moveTo(W/2,14); cx.lineTo(W/2,38); cx.stroke();
+    // Label
+    cx.fillStyle=windCol; cx.font='bold 12px "DM Sans",sans-serif';
+    cx.textAlign='center'; cx.fillText('💨 ' + windStr, W/2, 56);
 
     // Preview arc from tip of active hand
     if(PREVIEW && PREVIEW.length>1){{
