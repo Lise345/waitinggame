@@ -102,26 +102,25 @@ if not os.path.exists(VOTES_FILE): save_votes(_new_votes())
 # ── physics ───────────────────────────────────────────────────────────────────
 def trajectory(angle_deg, power, direction, wind):
     """
-    Molecule is launched from the FINGERTIP of each hand.
-    The hand (length 110px on canvas) points at angle_deg from vertical.
-    Left hand: 0°=straight up, positive angle tilts right (toward target).
+    Molecule launched from fingertip. Hand tilts AWAY from target.
+    Left:  tip_x = LPX - sin(angle)*IH  (tilts left, away from right target)
+    Right: tip_x = RPX + sin(angle)*IH  (tilts right, away from left target)
+    Launch velocity is along the hand direction (toward target).
     """
-    hand_len = 173  # pixels from pivot to fingertip — must match JS HAND_LEN=173
+    IH = 175  # drawn image height = distance pivot→tip, must match JS IH=175
+    rad = math.radians(angle_deg)
     if direction == "left":
-        # angle from vertical, tilting right
-        tip_x = LPX + math.sin(math.radians(angle_deg)) * hand_len
-        tip_y = LPY - math.cos(math.radians(angle_deg)) * hand_len
-        rad   = math.radians(angle_deg)          # launch direction = hand angle
-        vx    =  math.cos(rad) * power * SCALE  # wait — launch along hand direction
-        vy    = -math.sin(math.radians(90 - angle_deg)) * power * SCALE
-        # Simpler: launch in hand-pointing direction
-        vx =  math.sin(math.radians(angle_deg)) * power * SCALE
-        vy = -math.cos(math.radians(angle_deg)) * power * SCALE
+        tip_x = LPX - math.sin(rad) * IH
+        tip_y = LPY - math.cos(rad) * IH
+        # Launch toward right target: vx positive, vy upward
+        vx =  math.sin(rad) * power * SCALE
+        vy = -math.cos(rad) * power * SCALE
     else:
-        tip_x = RPX - math.sin(math.radians(angle_deg)) * hand_len
-        tip_y = RPY - math.cos(math.radians(angle_deg)) * hand_len
-        vx = -math.sin(math.radians(angle_deg)) * power * SCALE
-        vy = -math.cos(math.radians(angle_deg)) * power * SCALE
+        tip_x = RPX + math.sin(rad) * IH
+        tip_y = RPY - math.cos(rad) * IH
+        # Launch toward left target: vx negative
+        vx = -math.sin(rad) * power * SCALE
+        vy = -math.cos(rad) * power * SCALE
     x, y = tip_x, tip_y
     pts = []
     for _ in range(600):
@@ -246,7 +245,7 @@ html,body,[class*="css"]{{font-family:'DM Sans',sans-serif;
         rx,ry   = sc(RPX,RPY)
         ex,ey   = sc(*pts[-1])
         tip0x, tip0y = sc(pts[0][0], pts[0][1])  # arc start = molecule position
-        inactive_tip_y = round(ly - 173*SVG_H/C_H, 1)
+        inactive_tip_y = round(ly - 175*SVG_H/C_H, 1)
 
         w_col_svg = "#4fc3f7" if abs(wind)<2 else "#ffcc44" if abs(wind)<4 else "#E84040"
         w_arrow   = "&rarr;" if wind>0 else ("&larr;" if wind<0 else "&middot;")
@@ -409,33 +408,30 @@ st.markdown("""
     title="Fullscreen (F)">⛶ Fullscreen</button>
 </div>
 <script>
+// Fullscreen: request on document.documentElement (works in allow-fullscreen iframes)
 function toggleFS(){
-  // Streamlit runs inside an iframe — request fullscreen on the iframe element
-  // as seen from the parent, or fall back to the local document element.
-  try {
-    const el = window.frameElement || document.documentElement;
-    if(!document.fullscreenElement && !(document.webkitFullscreenElement)){
-      const req = el.requestFullscreen || el.webkitRequestFullscreen;
-      if(req) req.call(el).catch(()=>{});
-    } else {
-      const exit = document.exitFullscreen || document.webkitExitFullscreen;
-      if(exit) exit.call(document);
-    }
-  } catch(e) {
-    // fallback: open in new tab so user can use browser fullscreen (F11)
-    window.open(window.location.href, '_blank');
+  const inFS = !!(document.fullscreenElement || document.webkitFullscreenElement);
+  if(!inFS){
+    const el = document.documentElement;
+    const fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    if(fn) fn.call(el).catch(()=>{ window.open(window.location.href,'_blank'); });
+    else     window.open(window.location.href,'_blank');
+  } else {
+    const fn = document.exitFullscreen || document.webkitExitFullscreen || document.mozCancelFullScreen;
+    if(fn) fn.call(document);
   }
 }
-document.addEventListener('keydown', e=>{
-  if((e.key==='f'||e.key==='F') && !e.ctrlKey && !e.metaKey) toggleFS();
-});
-document.addEventListener('fullscreenchange', updateBtn);
-document.addEventListener('webkitfullscreenchange', updateBtn);
-function updateBtn(){
-  const btn=document.getElementById('fsBtn');
+function updateFsBtn(){
+  const btn = document.getElementById('fsBtn');
+  if(!btn) return;
   const inFS = !!(document.fullscreenElement||document.webkitFullscreenElement);
-  if(btn) btn.textContent = inFS ? '\u2715 Exit fullscreen' : '\u26f6 Fullscreen';
+  btn.innerHTML = inFS ? '&#x2715; Exit fullscreen' : '&#x26f6; Fullscreen';
 }
+['fullscreenchange','webkitfullscreenchange','mozfullscreenchange'].forEach(
+  ev => document.addEventListener(ev, updateFsBtn));
+document.addEventListener('keydown', e=>{
+  if((e.key==='f'||e.key==='F') && !e.ctrlKey && !e.metaKey && !e.altKey) toggleFS();
+});
 </script>""", unsafe_allow_html=True)
 
 # ── score + wind card ─────────────────────────────────────────────────────────
@@ -585,7 +581,7 @@ canvas{{width:100%;display:block;border-radius:12px}}</style></head><body>
 <script>
 const cv=document.getElementById('c'),cx=cv.getContext('2d'),W=900,H=400;
 const LPX={LPX},LPY={LPY},RPX={RPX},RPY={RPY};
-const HAND_LEN=173;  // pivot-to-fingertip: image is drawn IH=175px, tip ~2px from top
+const HAND_LEN=175;  // IH of drawn image = pivot-to-tip distance
 
 const PHASE="{phase}";
 const TRAJ={traj_js};
@@ -681,15 +677,15 @@ function drawHand(img, px, py, tiltDeg, isRight, flash){{
  *    → we need to NEGATE the JS rotation sign here to match Python.
  */
 function tipPos(px, py, tiltDeg, isRight){{
-  const rad = tiltDeg * Math.PI / 180;  // always positive, direction handled below
+  // Derived from drawHand transform stack: translate→rotate→(scale-x for right)→drawImage
+  // Left:  rotate(-tilt) → tip at (px - IH*sin(tilt), py - IH*cos(tilt))
+  // Right: rotate(+tilt) + scale(-1,1) → tip at (px + IH*sin(tilt), py - IH*cos(tilt))
+  const rad = tiltDeg * Math.PI / 180;
+  const IH  = 175;  // drawn image height — must match drawHand IH
   if(isRight){{
-    // right hand tip moves LEFT toward centre
-    return [ px - Math.sin(rad)*HAND_LEN,
-             py - Math.cos(rad)*HAND_LEN ];
+    return [ px + IH*Math.sin(rad), py - IH*Math.cos(rad) ];
   }} else {{
-    // left hand tip moves RIGHT toward centre  (matches Python: LPX + sin*len)
-    return [ px + Math.sin(rad)*HAND_LEN,
-             py - Math.cos(rad)*HAND_LEN ];
+    return [ px - IH*Math.sin(rad), py - IH*Math.cos(rad) ];
   }}
 }}
 
